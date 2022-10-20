@@ -8,14 +8,13 @@
 #include <stdint.h>
 #include <pthread.h>
 #include <stdbool.h>
+#include <errno.h>
 
 
 void *(*libc_malloc)(size_t) = NULL;
 void *(*libc_calloc)(size_t, size_t) = NULL;
 void *(*libc_realloc)(void *, size_t) = NULL;
 
-
-int force_libc = 0;
 static char tmpbuf[4096];
 static size_t tmppos = 0;
 static pthread_mutex_t mutex;
@@ -27,9 +26,9 @@ static void __attribute__((constructor)) init(void)
     libc_calloc = (void *(*) (size_t, size_t)) dlsym (RTLD_NEXT, "calloc");
     libc_malloc = (void *(*) (size_t)) dlsym (RTLD_NEXT, "malloc");
     libc_realloc = (void *(*) (void *, size_t)) dlsym (RTLD_NEXT, "realloc");
-    force_libc = 1;
+    no_hook = 1;
     pthread_mutex_init(&mutex, NULL);
-    force_libc = 0;
+    no_hook = 0;
 }
 
 void* simple_malloc(size_t size) {
@@ -46,7 +45,7 @@ bool use_libc_malloc()
     bool result;
     {
         pthread_mutex_lock(&mutex);
-        result = force_libc || !should_malloc_fail();
+        result = !should_malloc_fail();
         pthread_mutex_unlock(&mutex);
     }
     return result;
@@ -69,6 +68,7 @@ void *malloc(size_t size)
         retptr = libc_malloc(size);
     } else {
         retptr = NULL;
+        errno = ENOMEM;
     }
     no_hook = 0;
     return retptr;
@@ -97,6 +97,7 @@ void *calloc(size_t nmemb, size_t size)
         retptr = libc_calloc(nmemb, size);
     } else {
         retptr = NULL;
+        errno = ENOMEM;
     }
     no_hook = 0;
     return retptr;
@@ -104,9 +105,18 @@ void *calloc(size_t nmemb, size_t size)
 
 void *realloc(void *ptr, size_t size)
 {
-    if (use_libc_malloc()){
+    void* retptr;
+    if (no_hook) {
         return libc_realloc(ptr, size);
-    } else {
-        return NULL;
     }
+
+    no_hook = 1;
+    if (use_libc_malloc()){
+        retptr = libc_realloc(ptr, size);
+    } else {
+        retptr = NULL;
+        errno = ENOMEM;
+    }
+    no_hook = 0;
+    return retptr;
 }

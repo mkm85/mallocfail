@@ -35,7 +35,6 @@ efficient and reliable than e.g. random testing.
 #define HASH_BYTES ((HASH_BITS)/8)
 #define HASH_HEX_BYTES ((HASH_BITS)/4)
 
-extern int force_libc;
 extern void *(*libc_malloc)(size_t);
 extern void *(*libc_calloc)(size_t, size_t);
 extern void *(*libc_realloc)(void *, size_t);
@@ -99,7 +98,7 @@ static void load_traces(const char *filename)
 		if(fgets(buf, 1024, fptr)){
 			if(buf[strlen(buf)-1] == '\n'){
 				buf[strlen(buf)-1] = '\0';
-				
+
 				struct traces_s *t = libc_malloc(sizeof(struct traces_s));
 				memcpy(t->hash, buf, HASH_HEX_BYTES);
 				t->hash[HASH_HEX_BYTES] = '\0';
@@ -116,7 +115,6 @@ static int stack_context_exists(const char *filename, const char *hash_str)
 	struct traces_s *found_trace;
 	int rc;
 
-	force_libc = 1;
 	if(traces == NULL){
 		load_traces(filename);
 	}
@@ -129,7 +127,6 @@ static int stack_context_exists(const char *filename, const char *hash_str)
 		rc = 0;
 	}
 
-	force_libc = 0;
 	return rc;
 }
 
@@ -153,14 +150,11 @@ static void create_backtrace_hash(char *hash_str)
 	const unsigned char *hash;
 	sha3_context hash_context;
 
-	force_libc = 1;
-
 	sha3_Init256(&hash_context);
 	backtrace_full(state, 0, backtrace_callback, NULL, &hash_context);
 	hash = sha3_Finalize(&hash_context);
 	hex_encode(hash, HASH_BYTES, hash_str);
 
-	force_libc = 0;
 }
 
 
@@ -176,12 +170,10 @@ static int backtrace_print_callback(void *data, uintptr_t pc, const char *filena
 
 static void print_backtrace(void)
 {
-	force_libc = 1;
 	printf("------- Start trace -------\n");
 	backtrace_count = 0;
 	backtrace_full(state, 0, backtrace_print_callback, NULL, NULL);
 	printf("------- End trace -------\n");
-	force_libc = 0;
 }
 
 
@@ -210,7 +202,6 @@ int should_malloc_fail(void)
 		state = backtrace_create_state(NULL, 1, NULL, NULL);
 	}
 
-	force_libc = 1;
 	if(!hashfile){
 		hashfile = getenv("MALLOCFAIL_FILE");
 		if(!hashfile){
@@ -225,7 +216,6 @@ int should_malloc_fail(void)
 			debug = 0;
 		}
 	}
-	force_libc = 0;
 
 	create_backtrace_hash(hash_str);
 	exists = stack_context_exists(hashfile, hash_str);
@@ -239,4 +229,3 @@ int should_malloc_fail(void)
 		return 1;
 	}
 }
-
