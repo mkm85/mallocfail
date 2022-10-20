@@ -5,94 +5,108 @@
 #include <dlfcn.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
+#include <pthread.h>
+#include <stdbool.h>
 
 
 void *(*libc_malloc)(size_t) = NULL;
 void *(*libc_calloc)(size_t, size_t) = NULL;
 void *(*libc_realloc)(void *, size_t) = NULL;
 
+
 int force_libc = 0;
-static int init_state = 0;
-static char tmpbuf[1024];
+static char tmpbuf[4096];
 static size_t tmppos = 0;
+static pthread_mutex_t mutex;
 
+static __thread int no_hook = 0;
 
-static void init(void)
+static void __attribute__((constructor)) init(void)
 {
-	if(init_state) return;
-
-	init_state = 1;
-	libc_malloc = dlsym(RTLD_NEXT, "malloc");
-	libc_calloc = dlsym(RTLD_NEXT, "calloc");
-	libc_realloc = dlsym(RTLD_NEXT, "realloc");
-
-	if(!libc_malloc || !libc_calloc || !libc_realloc){
-		// FIXME - it would be nice to print an error here
-		exit(1);
-	}
-
-	init_state = 2;
+    libc_calloc = (void *(*) (size_t, size_t)) dlsym (RTLD_NEXT, "calloc");
+    libc_malloc = (void *(*) (size_t)) dlsym (RTLD_NEXT, "malloc");
+    libc_realloc = (void *(*) (void *, size_t)) dlsym (RTLD_NEXT, "realloc");
+    force_libc = 1;
+    pthread_mutex_init(&mutex, NULL);
+    force_libc = 0;
 }
 
+void* simple_malloc(size_t size) {
+    void* retptr;
+    if(tmppos + size >= sizeof(tmpbuf)) exit(1);
+
+    retptr = tmpbuf + tmppos;
+    tmppos += size;
+    return retptr;
+}
+
+bool use_libc_malloc()
+{
+    bool result;
+    {
+        pthread_mutex_lock(&mutex);
+        result = force_libc || !should_malloc_fail();
+        pthread_mutex_unlock(&mutex);
+    }
+    return result;
+}
 
 void *malloc(size_t size)
 {
-	void *retptr;
+    void *retptr;
 
-	if(init_state != 2){
-		if(init_state == 1){
-			if(tmppos + size >= sizeof(tmpbuf)) exit(1);
+    if (libc_malloc == NULL) {
+        return simple_malloc(size);
+    }
 
-			retptr = tmpbuf + tmppos;
-			tmppos += size;
-			return retptr;
-		}else{
-			init();
-		}
-	}
+    if (no_hook) {
+        return libc_malloc(size);
+    }
 
-	if(force_libc || !should_malloc_fail()){
-		return libc_malloc(size);
-	}else{
-		return NULL;
-	}
+    no_hook = 1;
+    if (use_libc_malloc()){
+        retptr = libc_malloc(size);
+    } else {
+        retptr = NULL;
+    }
+    no_hook = 0;
+    return retptr;
 }
 
 
 void *calloc(size_t nmemb, size_t size)
 {
-	void *ptr;
-	int i;
+    void *retptr;
 
-	if(init_state != 2){
-		if(init_state == 1){
-			ptr = malloc(nmemb*size);
-			for(i=0; i<nmemb*size; i++){
-				((char *)ptr)[i] = '\0';
-			}
-			return ptr;
-		}else{
-			init();
-		}
-	}
+    if (libc_calloc == NULL) {
+        size_t allocSize = nmemb * size;
+        retptr = simple_malloc(allocSize);
+        for (size_t i = 0; i < allocSize; i++) {
+            (((uint8_t*)retptr)[i]) = 0;
+        }
+        return retptr;
+    }
 
-	if(force_libc || !should_malloc_fail()){
-		return libc_calloc(nmemb, size);
-	}else{
-		return NULL;
-	}
+    if (no_hook) {
+        return libc_calloc(nmemb, size);
+    }
+
+    no_hook = 1;
+    if (use_libc_malloc()) {
+        retptr = libc_calloc(nmemb, size);
+    } else {
+        retptr = NULL;
+    }
+    no_hook = 0;
+    return retptr;
 }
-
 
 void *realloc(void *ptr, size_t size)
 {
-	if(init_state != 2) init();
-
-	if(force_libc || !should_malloc_fail()){
-		return libc_realloc(ptr, size);
-	}else{
-		return NULL;
-	}
+    if (use_libc_malloc()){
+        return libc_realloc(ptr, size);
+    } else {
+        return NULL;
+    }
 }
-
-
