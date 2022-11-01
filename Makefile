@@ -1,7 +1,7 @@
 CC=gcc
 INSTALL=install
 prefix=/usr/local
-CFLAGS=-Wall -ggdb -O2 -Ideps/uthash -Ideps/sha3 -Isrc
+CFLAGS=-Wall -O2 -Ideps/uthash -Ideps/sha3 -Isrc
 LDFLAGS=
 
 .PHONY : all test clean install
@@ -36,4 +36,3 @@ install : mallocfail.so
 	$(INSTALL) mallocfail.so ${DESTDIR}${prefix}/lib/mallocfail.so
 	$(INSTALL) mallocfail ${DESTDIR}${prefix}/bin/mallocfail
 	sed -i "s#/usr/local#${prefix}#" ${DESTDIR}${prefix}/bin/mallocfail
-

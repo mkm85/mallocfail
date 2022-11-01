@@ -148,3 +148,6 @@ https://github.com/brainhub/SHA3IUF
 
 Ian Taylor's libbacktrace
 https://github.com/ianlancetaylor/libbacktrace
+
+xxHash used as a system dependency.
+https://github.com/Cyan4973/xxHash

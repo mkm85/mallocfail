@@ -19,7 +19,7 @@ efficient and reliable than e.g. random testing.
 #define uthash_malloc libc_malloc
 
 #include "uthash.h"
-#include "sha3.h"
+#include "xxh3.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -31,7 +31,7 @@ efficient and reliable than e.g. random testing.
 #include <unistd.h>
 #include <backtrace.h>
 
-#define HASH_BITS 256
+#define HASH_BITS 64
 #define HASH_BYTES ((HASH_BITS)/8)
 #define HASH_HEX_BYTES ((HASH_BITS)/4)
 
@@ -134,26 +134,27 @@ static int stack_context_exists(const char *filename, const char *hash_str)
 static int backtrace_callback(void *data, uintptr_t pc, const char *filename, int lineno, const char *function)
 {
 	int len;
-	sha3_context *hash_context = (sha3_context *)data;
+	XXH3_state_t* hash_context = (XXH3_state_t*)data;
 
 	if(lineno){
 		len = snprintf(strbuf, 1024, "%s:%s:%d\n", filename, function, lineno);
-		sha3_Update(hash_context, strbuf, len);
+		XXH3_64bits_update(hash_context, (const uint8_t*)strbuf, len);
 	}
 
 	return 0;
 }
 
 
-static void create_backtrace_hash(char *hash_str)
+static void create_backtrace_hash(char *hash_str, size_t hash_str_len)
 {
-	const unsigned char *hash;
-	sha3_context hash_context;
-
-	sha3_Init256(&hash_context);
-	backtrace_full(state, 0, backtrace_callback, NULL, &hash_context);
-	hash = sha3_Finalize(&hash_context);
-	hex_encode(hash, HASH_BYTES, hash_str);
+	XXH3_state_t* const hash_context = XXH3_createState();
+	if (XXH3_64bits_reset(hash_context) == XXH_ERROR) abort();
+	backtrace_full(state, 0, backtrace_callback, NULL, hash_context);
+	XXH64_hash_t const hash = XXH3_64bits_digest(hash_context);
+	//snprintf(hash_str, hash_str_len, "%lu", hash);
+	hex_encode((const uint8_t*)&hash, sizeof(hash), hash_str);
+	//hash_str[hash_str_len-1] = '\0';
+	XXH3_freeState(hash_context);
 
 }
 
@@ -217,7 +218,7 @@ int should_malloc_fail(void)
 		}
 	}
 
-	create_backtrace_hash(hash_str);
+	create_backtrace_hash(hash_str, sizeof(hash_str));
 	exists = stack_context_exists(hashfile, hash_str);
 	if(!exists && debug){
 		print_backtrace();
