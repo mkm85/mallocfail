@@ -147,9 +147,6 @@ Dependencies
 Troy D. Hanson's uthash (included in repository)
 https://troydhanson.github.io/uthash/
 
-Andrey Jivsov sha3 implementation (included in repository)
-https://github.com/brainhub/SHA3IUF
-
 Ian Taylor's libbacktrace
 https://github.com/ianlancetaylor/libbacktrace
 
