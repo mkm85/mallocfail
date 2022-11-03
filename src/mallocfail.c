@@ -27,6 +27,7 @@ efficient and reliable than e.g. random testing.
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 #include <unistd.h>
 #include <backtrace.h>
@@ -130,31 +131,67 @@ static int stack_context_exists(const char *filename, const char *hash_str)
 	return rc;
 }
 
+static bool match_ignore(const char* buffer)
+{
+	char* ignorestr = getenv("MALLOCFAIL_IGNORE");
+	if (ignorestr == NULL) {
+		return false;
+	}
+	char* copy = strdup(ignorestr);
+	if (copy == NULL) {
+		return false;
+	}
+	char* rest;
+	char* token;
+	bool status = false;
+	for (token = strtok_r(copy, ";", &rest);
+    	token != NULL;
+    	token = strtok_r(NULL, ";", &rest))
+	{
+		if (strstr(buffer, token)) {
+			status = true;
+			break;
+		}
+	}
+	free(copy);
+	return status;
+}
+
+struct backtrace_context {
+	XXH3_state_t* hash_context;
+	bool ignore;
+};
 
 static int backtrace_callback(void *data, uintptr_t pc, const char *filename, int lineno, const char *function)
 {
 	int len;
-	XXH3_state_t* hash_context = (XXH3_state_t*)data;
+	struct backtrace_context* context = (struct backtrace_context*)data;
 
 	if(lineno){
 		len = snprintf(strbuf, 1024, "%s:%s:%d\n", filename, function, lineno);
-		XXH3_64bits_update(hash_context, (const uint8_t*)strbuf, len);
+		XXH3_64bits_update(context->hash_context, (const uint8_t*)strbuf, len);
+		if (match_ignore(strbuf)) {
+			context->ignore = true;
+		}
 	}
 
 	return 0;
 }
 
 
-static void create_backtrace_hash(char *hash_str, size_t hash_str_len)
+static bool create_backtrace_hash(char *hash_str, size_t hash_str_len)
 {
-	XXH3_state_t* const hash_context = XXH3_createState();
-	if (XXH3_64bits_reset(hash_context) == XXH_ERROR) abort();
-	backtrace_full(state, 0, backtrace_callback, NULL, hash_context);
-	XXH64_hash_t const hash = XXH3_64bits_digest(hash_context);
+	struct backtrace_context context;
+	memset(&context, 0, sizeof(struct backtrace_context));
+	context.hash_context = XXH3_createState();
+	if (XXH3_64bits_reset(context.hash_context) == XXH_ERROR) abort();
+	backtrace_full(state, 0, backtrace_callback, NULL, &context);
+	XXH64_hash_t const hash = XXH3_64bits_digest(context.hash_context);
 	//snprintf(hash_str, hash_str_len, "%lu", hash);
 	hex_encode((const uint8_t*)&hash, sizeof(hash), hash_str);
 	//hash_str[hash_str_len-1] = '\0';
-	XXH3_freeState(hash_context);
+	XXH3_freeState(context.hash_context);
+	return context.ignore;
 
 }
 
@@ -218,12 +255,15 @@ int should_malloc_fail(void)
 		}
 	}
 
-	create_backtrace_hash(hash_str, sizeof(hash_str));
+	bool ignore = create_backtrace_hash(hash_str, sizeof(hash_str));
 	exists = stack_context_exists(hashfile, hash_str);
-	if(!exists && debug){
+
+	bool should_fail = !ignore && !exists;
+
+	if(should_fail && debug){
 		print_backtrace();
 	}
-	if(exists){
+	if(!should_fail){
 		return 0;
 	}else{
 		fail_count++;

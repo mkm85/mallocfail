@@ -123,6 +123,10 @@ worth noting if this is critical to you.
 that can occur in a run. Setting to 1 will ensure that only a single failure
 will happen per run.
 
+`MALLOCFAIL_IGNORE` - this is a semicolon seperated list of strings in
+stacktraces which should be ignored. If a stacktrace includes an item from this
+list malloc will not fail for that stacktrace.
+
 Performance Impact
 ------------------
 
