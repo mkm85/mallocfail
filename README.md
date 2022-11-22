@@ -134,13 +134,6 @@ Allocated memory overhead associated with mallocfail is approximately a
 constant 2kB on the stack plus 128 bytes on the heap per stored call stack on a
 64-bit machine.
 
-
-Limitations
------------
-
-The current implementation will probably fail badly on threaded programs.
-
-
 Dependencies
 ------------
 
