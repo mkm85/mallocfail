@@ -14,13 +14,10 @@ mallocfail.o : src/mallocfail.c
 memory_funcs.o : src/memory_funcs.c
 	$(CC) -c $(CFLAGS) -fPIC -o $@ $<
 
-sha3.o : deps/sha3/sha3.c
-	$(CC) -c $(CFLAGS) -fPIC -o $@ $<
-
 mf_test.o : mf_test.c
 	$(CC) -c $(CFLAGS) -o $@ $<
 
-mallocfail.so : mallocfail.o memory_funcs.o sha3.o
+mallocfail.so : mallocfail.o memory_funcs.o 
 	$(CC) -shared -o $@ $^ ${LDFLAGS} -fPIC -ldl -lbacktrace
 
 mf_test : mf_test.o

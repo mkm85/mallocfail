@@ -143,5 +143,5 @@ https://troydhanson.github.io/uthash/
 Ian Taylor's libbacktrace
 https://github.com/ianlancetaylor/libbacktrace
 
-xxHash used as a system dependency.
+xxHash used as a system dependency e.g. install via apt-get.
 https://github.com/Cyan4973/xxHash
